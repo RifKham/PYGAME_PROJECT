@@ -55,23 +55,52 @@ def load_level(filename):
 def save_game():
     con = sqlite3.connect("save")
     cur = con.cursor()
-    res = []
     cur.execute("DELETE FROM npcs")
     con.commit()
     cur.execute("DELETE FROM buildings")
     con.commit()
+    cur.execute("DELETE FROM player")
+    con.commit()
+    cur.execute("DELETE FROM barrack")
+    con.commit()
+    n = 0
     for i in range(len(npcs)):
+        cords = npcs[i].get_cords()[0] + player.x * 64, npcs[i].get_cords()[1] + player.y * 64
         cur.execute("""
             INSERT OR REPLACE INTO npcs (id, type, pos)
             VALUES (?, ?, ?)
-       """, (i + 1, str(type(npcs[i])), str(npcs[i].get_cords())))
+       """, (i + 1, str(type(npcs[i])), str(cords)))
     for i in range(len(buildings)):
+        if not buildings[i].o:
+            cords = buildings[i].get_cords()[0] + player.x * 64, buildings[i].get_cords()[1] + player.y * 64
+        else:
+            cords = buildings[i].get_cords()[0] + player.x * 64, buildings[i].get_cords()[1] + (player.y - 0.5) * 64
         cur.execute("""
-            INSERT OR REPLACE INTO buildings (id, type, pos)
-            VALUES (?, ?, ?)
-        """, (i + 1, str(type(buildings[i])), str(buildings[i].get_cords())))
-        if type(buildings[i]) not in (Houses, Castle):
-            res.append(buildings[i].get_res())
+            INSERT OR REPLACE INTO buildings (id, type, pos, whose)
+            VALUES (?, ?, ?, ?)
+        """, (i + 1, str(type(buildings[i])), str(cords), buildings[i].wp))
+        if type(buildings[i]) == Farm:
+            if buildings[i].wp:
+                cur.execute("""REPLACE INTO player (food)
+                                VALUES (?)""", (buildings[i].get_res(),))
+        if type(buildings[i]) == Mine:
+            if buildings[i].wp:
+                cur.execute("""REPLACE INTO player (stone)
+                                VALUES (?)""", (buildings[i].get_res()[0],))
+                cur.execute("""REPLACE INTO player (metal)
+                                VALUES (?)""", (buildings[i].get_res()[1],))
+        if type(buildings[i]) == Barrack:
+            if buildings[i].wp:
+                cur.execute("""INSERT OR REPLACE INTO barrack (units)
+                                VALUES (?)""", (buildings[i].get_units(),))
+        if type(buildings[i]) == Sawmill:
+            if buildings[i].wp:
+                cur.execute("""REPLACE INTO player (wood)
+                                VALUES (?)""", (buildings[i].get_res(),))
+        if type(buildings[i]) == Houses:
+            if buildings[i].wp:
+                cur.execute("""REPLACE INTO player (people)
+                VALUES (?)""", (buildings[i].get_people(),))
     con.commit()
     con.close()
 
@@ -178,21 +207,24 @@ class EnemyKing(pygame.sprite.Sprite):
         self.building = ["f", "m", "s", "h"]
         self.time = 0
         self.wb = 5
+        self.b = 0
 
     def what_build(self):
         """
         Определяет, какой тип здания строить.
         Учитывает наличие войны и количество уже построенных зданий.
         """
-        if not self.start_war():
-            min_count = min(self.cb.values())
-            possible_builds = [k for k, v in self.cb.items() if
-                               v == min_count]
-            b = choice(possible_builds)
-        else:
-            return "b"
-        self.cb[b] += 1
-        return b
+        if self.time == 4:
+            if not self.start_war():
+                min_count = min(self.cb.values())
+                possible_builds = [k for k, v in self.cb.items() if
+                                   v == min_count]
+                b = choice(possible_builds)
+            else:
+                self.b += 1
+                return "b"
+            self.cb[b] += 1
+            return b
 
     def start_war(self):
         a = 0
@@ -232,21 +264,48 @@ class EnemyKing(pygame.sprite.Sprite):
                         posx = self.rect.x // 64 - tile_x
                         posy = self.rect.y // 64 - tile_y
                         if bu == "Farm":
-                            buildings.append(Farm(True, posx, posy, farm=False))
+                            buildings.append(Farm(True, posx, posy, wp=False))
                         elif bu == "Mine":
-                            buildings.append(Mine(True, posx, posy, mine=False))
+                            buildings.append(Mine(True, posx, posy, wp=False))
                         elif bu == "Sawmill":
-                            buildings.append(Sawmill(True, posx, posy, saw=False))
+                            buildings.append(Sawmill(True, posx, posy, wp=False))
                         elif bu == "Barrack":
-                            buildings.append(Barrack(True, posx, posy, train=False))
+                            buildings.append(Barrack(True, posx, posy, wp=False))
                         elif bu == "Houses":
-                            buildings.append(Houses(True, posx, posy, p=False))
+                            buildings.append(Houses(True, posx, posy, wp=False))
                         return
         self.time += 1
-    # def war(self):
-        # if self.cb["b"] > 3:
-            # e = Enemy()
-            # npcs.append(e)
+
+    def war(self):
+        if self.start_war():
+            if self.b > 3:
+                n = 0
+                for i in buildings:
+                    if type(i) == Barrack:
+                        n += 1
+                w = randrange(0, n)
+                n = 0
+                for i in range(len(buildings)):
+                    if type(buildings[i]) == Barrack:
+                        if n == w:
+                            print(n)
+                            e = Enemy(buildings[i].get_cords()[0] // 64, buildings[i].get_cords()[1] // 64)
+                            npcs.append(e)
+                            return
+                        n += 1
+
+    def start_attack(self):
+        n = 0
+        for i in npcs:
+            if type(i) == Enemy:
+                n += 1
+        return n
+
+    def attack(self):
+        if self.start_attack() >= 2:
+            for i in npcs:
+                if type(i) == Enemy:
+                    i.move(player.get_cords()[0] // 64, player.get_cords()[1] // 64)
 
 
 class Enemy(NPC):
@@ -257,14 +316,18 @@ class Enemy(NPC):
     def __init__(self, pos_x, pos_y, heal_points=10):
         super().__init__(pos_x, pos_y, "enemy")
 
-    def move(self):
-        min_x = 100
-        min_y = 100
-        for i in npcs:
-            if type(i) == UnitP:
-                if abs(self.rect.x // 64 - i.rect.x // 64) + abs(self.rect.y // 64 - i.rect.y // 64) < min_x + min_y:
-                    min_x = self.rect.x // 64 - i.rect.x // 64
-                    min_y = self.rect.y // 64 - i.rect.y // 64
+    def move(self, x=None, y=None):
+        if x is not None:
+            min_x = 100
+            min_y = 100
+            for i in npcs:
+                if type(i) == UnitP:
+                    if abs(self.rect.x // 64 - i.rect.x // 64) + abs(self.rect.y // 64 - i.rect.y // 64) < min_x + min_y:
+                        min_x = self.rect.x // 64 - i.rect.x // 64
+                        min_y = self.rect.y // 64 - i.rect.y // 64
+        else:
+            min_x = x
+            min_y = y
         if abs(min_x) + abs(min_y) <= 3:
             if abs(min_x) > abs(min_y):
                 if min_x < 0:
@@ -423,12 +486,13 @@ class UnitP(NPC):
 
 
 class Building(pygame.sprite.Sprite):
-    def __init__(self, built=False, pos_x=None, pos_y=None, build_type="farm", heal_points=5, farm=True):
+    def __init__(self, built=False, pos_x=None, pos_y=None, build_type="farm", heal_points=5, wp=True, o=False):
         if built:
             super().__init__(tiles_group, all_sprites, build_group)
             self.image = build_images[build_type]
             self.heal_points = heal_points
-            self.cf = farm
+            self.wp = wp
+            self.o = o
             self.rect = self.image.get_rect().move(
                 tile_width * pos_x, tile_height * pos_y)
             self.condition = 0.5
@@ -454,9 +518,11 @@ class Building(pygame.sprite.Sprite):
                     return
 
     def take_damage(self, d):
-        print("a")
         self.heal_points -= d
         self.check_life()
+
+    def whose(self):
+        return self.wp
 
 
 class Player(pygame.sprite.Sprite):
@@ -466,25 +532,35 @@ class Player(pygame.sprite.Sprite):
         self.rect = self.image.get_rect().move(
             tile_width * pos_x, tile_height * pos_y)
         self.key_press = 0
+        self.x = 8
+        self.y = 9.5
 
     def update(self, *args):
         if self.key_press != pygame.key.get_pressed():
             if pygame.key.get_pressed()[pygame.K_LEFT]:
                 self.rect.x -= STEP
+                self.x += 1
                 if pygame.sprite.spritecollideany(self, walls_group):
                     self.rect.x += STEP
+                    self.x -= 1
             if pygame.key.get_pressed()[pygame.K_RIGHT]:
                 self.rect.x += STEP
+                self.x -= 1
                 if pygame.sprite.spritecollideany(self, walls_group):
                     self.rect.x -= STEP
+                    self.x += 1
             if pygame.key.get_pressed()[pygame.K_UP]:
                 self.rect.y -= STEP
+                self.y += 1
                 if pygame.sprite.spritecollideany(self, walls_group):
                     self.rect.y += STEP
+                    self.y -= 1
             if pygame.key.get_pressed()[pygame.K_DOWN]:
                 self.rect.y += STEP
+                self.y -= 1
                 if pygame.sprite.spritecollideany(self, walls_group):
                     self.rect.y -= STEP
+                    self.y += 1
             self.key_press = pygame.key.get_pressed()
 
     def get_cords(self):
@@ -496,13 +572,12 @@ class Farm(Building):
 
     @classmethod
     def farming(cls):
-        cls.food += int(randrange(10, 12))
+        cls.food += int(randrange(7, 10))
 
-    def get_res(self):
-        return self.food
+    @classmethod
+    def get_res(cls):
+        return cls.food
 
-    def can_farm(self):
-        return self.cf
 
     @classmethod
     def eat(cls):
@@ -513,9 +588,10 @@ class Mine(Building):
     stone = 15
     metal = 10
 
-    def __init__(self, built=False, pos_x=None, pos_y=None, mine=True):
+    def __init__(self, built=False, pos_x=None, pos_y=None, wp=True, o=False):
         super().__init__(built, pos_x, pos_y, "mine")
-        self.cm = mine
+        self.wp = wp
+        self.o = o
 
     @classmethod
     def mining(cls, c=0.7):
@@ -527,11 +603,9 @@ class Mine(Building):
         cls.stone -= n + 5
         cls.metal -= n
 
-    def get_res(self):
-        return self.stone, self.metal
-
-    def can_mine(self):
-        return self.cm
+    @classmethod
+    def get_res(cls):
+        return cls.stone, cls.metal
 
     @classmethod
     def use(cls):
@@ -542,34 +616,38 @@ class Mine(Building):
 class Barrack(Building):
     units = 0
 
-    def __init__(self, built=False, pos_x=None, pos_y=None, train=True):
+    def __init__(self, built=False, pos_x=None, pos_y=None, wp=True, o=False):
         super().__init__(built, pos_x, pos_y, "barrack")
         self.x = pos_x
         self.y = pos_y
-        self.ct = train
+        self.wp = wp
+        self.o = o
 
     def training(self):
         if self.units < 20:
             self.units += randrange(0, 3) * (houses.people // 5)
 
-    def can_train(self):
-        return self.ct
-
     def eat(self):
         farm.food -= (self.units // 5 - 5)
 
     def set_unit(self):
-        if self.units >= 20:
+        if self.units >= 20 and mine.metal >= 10:
             npcs.append(UnitP(self.rect.x // 64, self.rect.y // 64, "unit"))
             self.units -= 20
+            mine.metal -= 10
+
+    @classmethod
+    def get_units(cls):
+        return cls.units
 
 
 class Sawmill(Building):
     wood = 20
 
-    def __init__(self, built=False, pos_x=None, pos_y=None, saw=True):
+    def __init__(self, built=False, pos_x=None, pos_y=None, wp=True, o=False):
         super().__init__(built, pos_x, pos_y, "sawmill")
-        self.cs = saw
+        self.wp = wp
+        self.o = o
 
     @classmethod
     def sawing(cls, c=0.7):
@@ -583,28 +661,27 @@ class Sawmill(Building):
     def use(cls):
         cls.wood -= int(randrange(0, 2) * houses.people * 0.1)
 
-    def get_res(self):
-        return self.wood
-
-    def can_saw(self):
-        return self.cs
+    @classmethod
+    def get_res(cls):
+        return cls.wood
 
 
 class Castle(Building):
-    def __init__(self, built=False, pos_x=None, pos_y=None, player=True):
-        if player:
-            super().__init__(built, pos_x, pos_y, "castle")
+    def __init__(self, built=False, pos_x=None, pos_y=None, wp=True):
+        if wp:
+            super().__init__(built, pos_x, pos_y, "castle", wp=wp)
         else:
-            super().__init__(built, pos_x, pos_y, "castle_e")
+            super().__init__(built, pos_x, pos_y, "castle_e", wp=wp)
 
 
 class Houses(Building):
     people = 10
     max_people = 10
 
-    def __init__(self, built=False, pos_x=None, pos_y=None, p=True):
+    def __init__(self, built=False, pos_x=None, pos_y=None, wp=True, o=False):
         super().__init__(built, pos_x, pos_y, "houses")
-        self.p = p
+        self.wp = wp
+        self.o = o
 
     @classmethod
     def do_people(cls):
@@ -633,9 +710,6 @@ class Houses(Building):
         farm.eat()
         mine.use()
         sawmill.use()
-
-    def can_do_people(self):
-        return self.p
 
     @classmethod
     def get_people(cls):
@@ -671,24 +745,43 @@ def load_game():
     cur = con.cursor()
     b = cur.execute("SELECT * FROM buildings").fetchall()
     n = cur.execute("SELECT * FROM npcs").fetchall()
+    farm.food = max(cur.execute("SELECT food FROM player").fetchall())[0]
+    mine.stone = max(cur.execute("SELECT stone FROM player").fetchall())[0]
+    mine.metal = max(cur.execute("SELECT metal FROM player").fetchall())[0]
+    houses.people = max(cur.execute("SELECT people FROM player").fetchall())[0]
+    sawmill.wood = max(cur.execute("SELECT wood FROM player").fetchall())[0]
+    c = 0
+    for i in buildings:
+        if type(i) == Barrack:
+            i.units = 0
+            c += 1
     for i in b[:]:
-        pos = i[2][1:-1].split(",")
+        pos = i[2][1:-1].split(", ")
         if "Farm" in i[1]:
-            buildings.append(Farm(True, int(pos[0]) // 64, int(pos[1]) // 64))
+            if can_build((int(pos[0]), float(pos[1])), "Farm"):
+                buildings.append(Farm(True, int(pos[0]) // 64, float(pos[1]) // 64, wp=i[-1]))
         if "Mine" in i[1]:
-            buildings.append(Mine(True, int(pos[0]) // 64, int(pos[1]) // 64))
+            if can_build((int(pos[0]), float(pos[1])), "Mine"):
+                buildings.append(Mine(True, int(pos[0]) // 64, float(pos[1]) // 64, wp=i[-1]))
         if "Sawmill" in i[1]:
-            buildings.append(Sawmill(True, int(pos[0]) // 64, int(pos[1]) // 64))
+            if can_build((int(pos[0]), float(pos[1])), "Sawmill"):
+                buildings.append(Sawmill(True, int(pos[0]) // 64, float(pos[1]) // 64, wp=i[-1]))
         if "Houses" in i[1]:
-            buildings.append(Houses(True, int(pos[0]) // 64, int(pos[1]) // 64))
+            if can_build((int(pos[0]), float(pos[1])), "Houses"):
+                buildings.append(Houses(True, int(pos[0]) // 64, float(pos[1]) // 64, wp=i[-1]))
         if "Barrack" in i[1]:
-            buildings.append(Barrack(True, int(pos[0]) // 64, int(pos[1]) // 64))
+            if can_build((int(pos[0]), float(pos[1])), "Barrack"):
+                buildings.append(Barrack(True, int(pos[0]) // 64, float(pos[1]) // 64, wp=i[-1]))
+        if "Castle" in i[1]:
+            if can_build((int(pos[0]), float(pos[1])), "Castle"):
+                buildings.append(Castle(True, int(pos[0]) // 64, float(pos[1]) // 64, wp=i[-1]))
     for i in n[:]:
         pos = i[2][1:-1].split(",")
-        if "UnitP" in pos[1]:
-            npcs.append(UnitP(pos[0] // 64, pos[1] // 64, "unit", i[-1]))
-        elif "Enemy" in pos[1]:
-            npcs.append(Enemy(pos[0] // 64, pos[1] // 64, int(i[-1])))
+        if "UnitP" in i[1]:
+            npcs.append(UnitP(int(pos[0]) // 64, float(pos[1]) // 64, "unit", i[-1]))
+            print(npcs)
+        elif "Enemy" in i[1]:
+            npcs.append(Enemy(int(pos[0]) // 64, float(pos[1]) // 64, int(i[-1])))
 
 
 def handle_mouse_click(pos):
@@ -768,7 +861,7 @@ def generate_level(level):
                 buildings.append(Mine(True, x, y - 0.5, False))
             elif level[y][x] == '2':
                 Tile('empty', x, y)
-                buildings.append(Farm(True, x, y - 0.5, farm=False))
+                buildings.append(Farm(True, x, y - 0.5, wp=False))
             elif level[y][x] == '3':
                 Tile('empty', x, y)
                 buildings.append(Sawmill(True, x, y - 0.5, False))
@@ -781,7 +874,7 @@ def generate_level(level):
             elif level[y][x] == '0':
                 Tile('empty', x, y)
                 new_enemy = EnemyKing(x, y)
-                buildings.append(Castle(True, x, y - 0.5, player=False))
+                buildings.append(Castle(True, x, y - 0.5, wp=False))
     return new_player, x, y, new_enemy
 
 
@@ -822,20 +915,16 @@ def can_build(c, b, *args):
 
 def ext():
     for i in buildings:
-        if type(i) == Farm:
-            if i.can_farm():
+        if i.wp:
+            if type(i) == Farm:
                 i.farming()
-        elif type(i) == Mine:
-            if i.can_mine():
+            elif type(i) == Mine:
                 i.mining()
-        elif type(i) == Sawmill:
-            if i.can_saw():
+            elif type(i) == Sawmill:
                 i.sawing()
-        elif type(i) == Barrack:
-            if i.can_train():
+            elif type(i) == Barrack:
                 i.training()
-        elif type(i) == Houses:
-            if i.can_do_people():
+            elif type(i) == Houses:
                 i.do_people()
 
 
@@ -867,8 +956,6 @@ def condition():
                     if i.get_cords() == (j.rect.x, j.rect.y):
                         if j.tile_type == "rock":
                             i.set_con()
-                        elif j.tile_type == "sand":
-                            i.set_con(2)
                 if type(i) == Farm:
                     if i.get_cords() == (j.rect.x, j.rect.y):
                         if j.tile_type == "empty":
@@ -886,7 +973,7 @@ def build(pos):
                 cursor_image = load_image(f"camera.png")
                 sawmill.build(15)
                 mine.build(5)
-                buildings.append(Farm(True, pos[0] // 64, pos[1] // 64))
+                buildings.append(Farm(True, pos[0] // 64, pos[1] // 64, o=True))
                 mixer.music.play()
         elif build_type == 2:
             if can_build(pos, "Mine", {"wood": 15, "stone": 10, "metal": 5}):
@@ -894,7 +981,7 @@ def build(pos):
                 cursor_image = load_image(f"camera.png")
                 sawmill.build(15)
                 mine.build(5)
-                buildings.append(Mine(True, pos[0] // 64, pos[1] // 64))
+                buildings.append(Mine(True, pos[0] // 64, pos[1] // 64, o=True))
                 mixer.music.play()
         elif build_type == 4:
             if can_build(pos, "Sawmill", {"wood": 15, "stone": 10, "metal": 5}):
@@ -902,7 +989,7 @@ def build(pos):
                 cursor_image = load_image(f"camera.png")
                 sawmill.build(15)
                 mine.build(5)
-                buildings.append(Sawmill(True, pos[0] // 64, pos[1] // 64))
+                buildings.append(Sawmill(True, pos[0] // 64, pos[1] // 64, o=True))
                 mixer.music.play()
         elif build_type == 3:
             if can_build(pos, "", {"wood": 15, "stone": 10, "metal": 5}):
@@ -910,7 +997,7 @@ def build(pos):
                 cursor_image = load_image(f"camera.png")
                 sawmill.build(15)
                 mine.build(5)
-                buildings.append(Barrack(True, pos[0] // 64, pos[1] // 64))
+                buildings.append(Barrack(True, pos[0] // 64, pos[1] // 64, o=True))
                 mixer.music.play()
         elif build_type == 5:
             if can_build(pos, "", {"wood": 15, "stone": 10, "metal": 5}):
@@ -918,7 +1005,7 @@ def build(pos):
                 cursor_image = load_image(f"camera.png")
                 sawmill.build(15)
                 mine.build(5)
-                buildings.append(Houses(True, pos[0] // 64, pos[1] // 64))
+                buildings.append(Houses(True, pos[0] // 64, pos[1] // 64, o=True))
                 mixer.music.play()
                 houses.do_max_people()
 
@@ -1145,6 +1232,9 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                save_window()
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 build(event.pos)
@@ -1232,6 +1322,7 @@ while running:
         camera.apply(sprite)
     if elapsed_time >= 3:
         enemy.build()
+        enemy.war()
         houses.consume()
         for i in npcs:
             if type(i) == UnitP:
@@ -1243,12 +1334,7 @@ while running:
                 i.eat()
         houses.die_people()
         start_time = time.time()
-        if len(buildings) > 0:
-            w = sawmill.get_res()
-            f = farm.get_res()
-            s = mine.get_res()[0]
-            m = mine.get_res()[1]
-            ext()
+        ext()
     if pygame.mouse.get_focused() and cursor_image != 0:
         cursor_pos = pygame.mouse.get_pos()
         screen.blit(cursor_image, (cursor_pos[0], cursor_pos[1]))
