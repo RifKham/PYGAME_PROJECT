@@ -208,6 +208,7 @@ class EnemyKing(pygame.sprite.Sprite):
         self.time = 0
         self.wb = 5
         self.b = 0
+        self.time_t = 0
 
     def what_build(self):
         """
@@ -278,21 +279,25 @@ class EnemyKing(pygame.sprite.Sprite):
 
     def war(self):
         if self.start_war():
-            if self.b > 3:
-                n = 0
-                for i in buildings:
-                    if type(i) == Barrack:
-                        n += 1
-                w = randrange(0, n)
-                n = 0
-                for i in range(len(buildings)):
-                    if type(buildings[i]) == Barrack:
-                        if n == w:
-                            print(n)
-                            e = Enemy(buildings[i].get_cords()[0] // 64, buildings[i].get_cords()[1] // 64)
-                            npcs.append(e)
-                            return
-                        n += 1
+            self.time_t += 1
+            if self.time_t == 3:
+                self.time_t = 0
+                if self.b > 3:
+                    n = 0
+                    for i in buildings:
+                        if type(i) == Barrack:
+                            n += 1
+                    w = randrange(0, n)
+                    n = 0
+                    for i in range(len(buildings)):
+                        cords = buildings[i].get_cords()[0], buildings[i].get_cords()[1]
+                        if type(buildings[i]) == Barrack:
+                            if n == w and can_set_unit(cords):
+                                e = Enemy(cords[0] // 64, cords[1] // 64)
+                                npcs.append(e)
+                                self.time_t = 0
+                                return
+                            n += 1
 
     def start_attack(self):
         n = 0
@@ -302,10 +307,16 @@ class EnemyKing(pygame.sprite.Sprite):
         return n
 
     def attack(self):
-        if self.start_attack() >= 2:
+        x, y = None, None
+        for i in buildings:
+            if type(i) == Castle:
+                if i.wp:
+                    x = i.get_cords()[0]
+                    y = i.get_cords()[1]
+        if self.start_attack() >= 2 and x is not None:
             for i in npcs:
                 if type(i) == Enemy:
-                    i.move(player.get_cords()[0] // 64, player.get_cords()[1] // 64)
+                    i.e_move(x - i.get_cords()[0], y - i.get_cords()[1], 100)
 
 
 class Enemy(NPC):
@@ -316,37 +327,53 @@ class Enemy(NPC):
     def __init__(self, pos_x, pos_y, heal_points=10):
         super().__init__(pos_x, pos_y, "enemy")
 
-    def move(self, x=None, y=None):
-        if x is not None:
-            min_x = 100
-            min_y = 100
+    def e_move(self, x=None, y=None, r=3):
+        if x is None:
+            min_x = 10000
+            min_y = 10000
             for i in npcs:
                 if type(i) == UnitP:
-                    if abs(self.rect.x // 64 - i.rect.x // 64) + abs(self.rect.y // 64 - i.rect.y // 64) < min_x + min_y:
-                        min_x = self.rect.x // 64 - i.rect.x // 64
-                        min_y = self.rect.y // 64 - i.rect.y // 64
+                    if abs(self.rect.x - i.rect.x) + abs(self.rect.y - i.rect.y) < min_x + min_y:
+                        min_x = self.rect.x - i.rect.x
+                        min_y = self.rect.y - i.rect.y
         else:
             min_x = x
             min_y = y
-        if abs(min_x) + abs(min_y) <= 3:
+        if abs(min_x) + abs(min_y) <= r * 64:
             if abs(min_x) > abs(min_y):
                 if min_x < 0:
-                    self.rect.x += STEP
-                    if pygame.sprite.spritecollideany(self, walls_group):
-                        self.rect.x -= STEP
-                else:
+                    for i in npcs:
+                        x, y = i.get_cords()
+                        if x == self.get_cords()[0] - 64 and y == self.get_cords()[1]:
+                            return
                     self.rect.x -= STEP
                     if pygame.sprite.spritecollideany(self, walls_group):
                         self.rect.x += STEP
+                else:
+                    for i in npcs:
+                        x, y = i.get_cords()
+                        if x == self.get_cords()[0] + 64 and y == self.get_cords()[1]:
+                            return
+                    self.rect.x += STEP
+                    if pygame.sprite.spritecollideany(self, walls_group):
+                        self.rect.x -= STEP
             else:
                 if min_y < 0:
-                    self.rect.y += STEP
-                    if pygame.sprite.spritecollideany(self, walls_group):
-                        self.rect.y -= STEP
-                else:
+                    for i in npcs:
+                        x, y = i.get_cords()
+                        if y == self.get_cords()[1] - 64 and x == self.get_cords()[0]:
+                            return
                     self.rect.y -= STEP
                     if pygame.sprite.spritecollideany(self, walls_group):
                         self.rect.y += STEP
+                else:
+                    for i in npcs:
+                        x, y = i.get_cords()
+                        if y == self.get_cords()[1] + 64 and x == self.get_cords()[0]:
+                            return
+                    self.rect.y += STEP
+                    if pygame.sprite.spritecollideany(self, walls_group):
+                        self.rect.y -= STEP
 
     def take_damage(self):
         self.hp -= 3
@@ -357,6 +384,7 @@ class Enemy(NPC):
             self.kill()
 
     def attack(self):
+        print("a")
         f = True
         for i in npcs:
             if type(i) == UnitP:
@@ -367,9 +395,11 @@ class Enemy(NPC):
                     return
         if f:
             for i in buildings:
+                print("a")
                 if (abs(i.get_cords()[0] - self.get_cords()[0]) <= 64 or
                         abs(i.get_cords()[1] - self.get_cords()[1]) <= 64):
                     i.take_damage(2)
+                    print("aaa")
                     return
 
 
@@ -779,7 +809,6 @@ def load_game():
         pos = i[2][1:-1].split(",")
         if "UnitP" in i[1]:
             npcs.append(UnitP(int(pos[0]) // 64, float(pos[1]) // 64, "unit", i[-1]))
-            print(npcs)
         elif "Enemy" in i[1]:
             npcs.append(Enemy(int(pos[0]) // 64, float(pos[1]) // 64, int(i[-1])))
 
@@ -1056,6 +1085,14 @@ def start_screen():
         clock.tick(FPS)
 
 
+def win():
+    pass
+
+
+def lose():
+    pass
+
+
 def save_window():
     fon = pygame.transform.scale(load_image('fon.png'), (width, height))
     screen.blit(fon, (0, 0))
@@ -1116,6 +1153,14 @@ def training_window():
 
         pygame.display.flip()
         clock.tick(FPS)
+
+
+def can_set_unit(c):
+    for i in npcs:
+        cords = i.get_cords()[0], i.get_cords()[1]
+        if c == cords:
+            return False
+    return True
 
 
 def training(step):
@@ -1324,11 +1369,14 @@ while running:
         enemy.build()
         enemy.war()
         houses.consume()
+        enemy.attack()
         for i in npcs:
             if type(i) == UnitP:
                 i.attack()
                 if i.len_x != 0 or i.len_y != 0:
                     i.u_move()
+            if type(i) == Enemy:
+                i.attack()
         for i in buildings:
             if type(i) == Barrack:
                 i.eat()
