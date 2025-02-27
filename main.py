@@ -829,7 +829,7 @@ def handle_mouse_click(pos):
     if row == 0 <= col < len(images):
         if build_type == 0:
             build_type = col + 1
-            cursor_image = load_image(f"{images[col].split("_")[0]}.png")
+            cursor_image = load_image(f"{images[col].split('_')[0]}.png")
         else:
             build_type = 0
             cursor_image = load_image(f"camera.png")
@@ -1218,23 +1218,23 @@ def training(step):
         t1 = "Еду едят люди;"
         t2 = "дерево, камень и металл"
         t3 = "нужен для строительства"
-    elif step == 5:
+    elif step == 7:
         t1 = "Чтобы создать юнита вам нужно"
         t2 = "построить казарму и подождать"
         t3 = "пока войска тренируются"
-    elif step == 6:
+    elif step == 8:
         t1 = "Когда тренировка закончится вы"
         t2 = "должны нажать на казарму, после"
         t3 = "чего появится солдат"
-    elif step == 7:
+    elif step == 9:
         t1 = "Чтобы управлять нажмите на него."
         t2 = "Он завсетится и если вы нажмёте на"
         t3 = "клетку, то он пойдёт туда"
-    elif step == 8:
+    elif step == 10:
         t1 = "Если вы нажмёте на вражеское"
         t2 = "здание или противника то юниты"
         t3 = "будут атаковать их"
-    elif step == 9:
+    elif step == 11:
         t1 = "Если ваши юниты сломают"
         t2 = "вражескую крепость, то вы"
         t3 = "победите!"
