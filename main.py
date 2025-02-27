@@ -23,7 +23,7 @@ npcs = []
 
 
 def load_image(name, colorkey=None):
-    fullname = os.path.join('data', name)
+    fullname = os.path.join('dist/data', name)
     # если файл не существует, то выходим
     if not os.path.isfile(fullname):
         print(f"Файл с изображением '{fullname}' не найден")
@@ -146,11 +146,11 @@ attack_images_e = [load_image("attack_e2.png"), load_image("attack_e3.png")]
 images = ["farm_plan", "mine_plan", "barrack_plan", "sawmill_plan", "houses_plan"]
 im = []
 for i in images:
-    image = pygame.image.load(f'data/{i}.png')
+    image = pygame.image.load(f'dist/data/{i}.png')
     im.append(image)
 image_check_res = []
 for i in ["wood_check", "stone_check", "metal_check"]:
-    image = pygame.image.load(f'data/{i}.png')
+    image = pygame.image.load(f'dist/data/{i}.png')
     image_check_res.append(image)
 
 buttons = [load_image("b2.png"), load_image("b1.png")]
@@ -1002,7 +1002,7 @@ def condition():
 def build(pos):
     global build_type, cursor_image
     if not handle_mouse_click(pos):
-        mixer.music.load('data/build_voice.mp3')
+        mixer.music.load('dist/data/build_voice.mp3')
         mixer.music.set_volume(0.15)
         if build_type == 1:
             if can_build(pos, "Farm", {"wood": 15, "stone": 10, "metal": 5}):
