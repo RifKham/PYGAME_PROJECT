@@ -139,6 +139,9 @@ npc_images = {
 tile_width = tile_height = 64
 soldiers = load_image("soldier.png")
 weapon = load_image("weapon.png")
+attack_im = load_image("attack1")
+attack_images_p = [load_image("attack_p2"), load_image("attack_p3")]
+attack_images_e = [load_image("attack_e2"), load_image("attack_e3")]
 
 images = ["farm_plan", "mine_plan", "barrack_plan", "sawmill_plan", "houses_plan"]
 im = []
@@ -496,9 +499,11 @@ class UnitP(NPC):
                     if (abs(i.get_cords()[0] - self.get_cords()[0]) <= 64 or
                             abs(i.get_cords()[1] - self.get_cords()[1]) <= 64):
                         i.take_damage(2)
+                        return
             for i in buildings:
                 if (abs(i.get_cords()[0] - self.get_cords()[0]) <= 64 or
                         abs(i.get_cords()[1] - self.get_cords()[1]) <= 64):
+                    print(type(i))
                     i.take_damage(2)
                     return
 
@@ -513,6 +518,35 @@ class UnitP(NPC):
                     del npcs[i]
                     self.kill()
                     return
+
+
+class Attack(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y, who):
+        super().__init__(tiles_group, all_sprites, build_group)
+        self.image = attack_im
+        self.frame_c = 0
+        self.who = who
+        self.c_frame = 0
+        self.rect = self.image.get_rect().move(
+            tile_width * pos_x, tile_height * pos_y)
+
+    def update(self):
+        if self.who == "p":
+            if self.frame_c >= len(attack_images_p):
+                self.frame_c = 0
+                self.c_frame = (self.c_frame + 1) % len(attack_images_p)  # Циклическая смена кадров
+                self.image = attack_images_p[self.c_frame]
+
+                if self.c_frame == 0:
+                    self.kill()
+        else:
+            if self.frame_c >= len(attack_images_e):
+                self.frame_c = 0
+                self.c_frame = (self.c_frame + 1) % len(attack_images_e)  # Циклическая смена кадров
+                self.image = attack_images_e[self.c_frame]
+
+                if self.c_frame == 0:
+                    self.kill()
 
 
 class Building(pygame.sprite.Sprite):
@@ -543,6 +577,11 @@ class Building(pygame.sprite.Sprite):
         if self.heal_points <= 0:
             for i in range(len(buildings)):
                 if buildings[i].get_cords() == self.get_cords():
+                    if type(buildings[i]) == Castle:
+                        if buildings[i].wp:
+                            lose()
+                        else:
+                            win()
                     del buildings[i]
                     self.kill()
                     return
@@ -1086,11 +1125,29 @@ def start_screen():
 
 
 def win():
-    pass
+    fon = pygame.transform.scale(load_image('win_window.png'), (width, height))
+    screen.blit(fon, (0, 0))
+    pygame.display.flip()
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                terminate()
+                return
 
 
 def lose():
-    pass
+    fon = pygame.transform.scale(load_image('lose_window.png'), (width, height))
+    screen.blit(fon, (0, 0))
+    pygame.display.flip()
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                terminate()
+                return
 
 
 def save_window():
@@ -1314,43 +1371,14 @@ while running:
                     x = True
                     for i in buildings:
                         b_c = i.get_cords()
-                        b_t = i
-                        for i in npcs:
-                            if type(i) == UnitP and x:
+                        for j in npcs:
+                            if type(j) == UnitP and x:
                                 if b_c != 0:
                                     if (event.pos[0] // 64, event.pos[1] // 64) == (b_c[0] // 64, b_c[1] // 64):
-                                        if type(b_t) == Farm:
-                                            if not b_t.can_farm():
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64, True)
-                                                x = False
-                                            else:
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
-                                        if type(b_t) == Mine:
-                                            if not b_t.can_mine():
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64, True)
-                                                x = False
-                                            else:
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
-                                        if type(b_t) == Sawmill:
-                                            if not b_t.can_saw():
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64, True)
-                                                x = False
-                                            else:
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
-                                        if type(b_t) == Barrack:
-                                            if not b_t.can_train():
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64, True)
-                                                x = False
-                                            else:
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
-                                        if type(b_t) == Houses:
-                                            if not b_t.can_do_people():
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64, True)
-                                                x = False
-                                            else:
-                                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
-                                    else:
-                                        i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
+                                        if not i.wp:
+                                            j.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64, True)
+                                        else:
+                                            j.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
 
     screen.fill((255, 255, 255))
     tiles_group.draw(screen)
@@ -1360,6 +1388,8 @@ while running:
     current_time = time.time()
     elapsed_time = current_time - start_time
     draw_images()
+    attack = Attack(2, 2, "p")
+    attack.update()
     build_res()
     camera.update(player)
     counters()
