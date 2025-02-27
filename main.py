@@ -139,9 +139,9 @@ npc_images = {
 tile_width = tile_height = 64
 soldiers = load_image("soldier.png")
 weapon = load_image("weapon.png")
-attack_im = load_image("attack1")
-attack_images_p = [load_image("attack_p2"), load_image("attack_p3")]
-attack_images_e = [load_image("attack_e2"), load_image("attack_e3")]
+attack_im = load_image("attack1.png")
+attack_images_p = [load_image("attack_p2.png"), load_image("attack_p3.png")]
+attack_images_e = [load_image("attack_e2.png"), load_image("attack_e3.png")]
 
 images = ["farm_plan", "mine_plan", "barrack_plan", "sawmill_plan", "houses_plan"]
 im = []
@@ -387,7 +387,6 @@ class Enemy(NPC):
             self.kill()
 
     def attack(self):
-        print("a")
         f = True
         for i in npcs:
             if type(i) == UnitP:
@@ -398,12 +397,11 @@ class Enemy(NPC):
                     return
         if f:
             for i in buildings:
-                print("a")
-                if (abs(i.get_cords()[0] - self.get_cords()[0]) <= 64 or
-                        abs(i.get_cords()[1] - self.get_cords()[1]) <= 64):
-                    i.take_damage(2)
-                    print("aaa")
-                    return
+                if i.wp:
+                    if (abs(i.get_cords()[0] - self.get_cords()[0]) <= 64 or
+                            abs(i.get_cords()[1] - self.get_cords()[1]) <= 64):
+                        i.take_damage(2)
+                        return
 
 
 class UnitP(NPC):
@@ -518,35 +516,6 @@ class UnitP(NPC):
                     del npcs[i]
                     self.kill()
                     return
-
-
-class Attack(pygame.sprite.Sprite):
-    def __init__(self, pos_x, pos_y, who):
-        super().__init__(tiles_group, all_sprites, build_group)
-        self.image = attack_im
-        self.frame_c = 0
-        self.who = who
-        self.c_frame = 0
-        self.rect = self.image.get_rect().move(
-            tile_width * pos_x, tile_height * pos_y)
-
-    def update(self):
-        if self.who == "p":
-            if self.frame_c >= len(attack_images_p):
-                self.frame_c = 0
-                self.c_frame = (self.c_frame + 1) % len(attack_images_p)  # Циклическая смена кадров
-                self.image = attack_images_p[self.c_frame]
-
-                if self.c_frame == 0:
-                    self.kill()
-        else:
-            if self.frame_c >= len(attack_images_e):
-                self.frame_c = 0
-                self.c_frame = (self.c_frame + 1) % len(attack_images_e)  # Циклическая смена кадров
-                self.image = attack_images_e[self.c_frame]
-
-                if self.c_frame == 0:
-                    self.kill()
 
 
 class Building(pygame.sprite.Sprite):
@@ -1326,8 +1295,7 @@ cursor_image = 0
 last_click_time = 0
 click_cooldown = 150
 y = 0
-speed = 60
-attack = False
+speed = 30
 start_the_game = False
 pygame.time.set_timer(USEREVENT + 1, 1000)
 while running:
@@ -1356,6 +1324,7 @@ while running:
                 if not f:
                     e_c = 0
                     x = True
+                    point = False
                     for i in npcs:
                         if type(i) == Enemy:
                             e_c = i.get_cords()
@@ -1365,8 +1334,10 @@ while running:
                                     if (event.pos[0] // 64, event.pos[1] // 64) == (e_c[0] // 64, e_c[1] // 64):
                                         i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64, True)
                                         x = False
+                                        point = True
                                     else:
                                         i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
+                                        point = True
                     b_c = 0
                     x = True
                     for i in buildings:
@@ -1377,8 +1348,14 @@ while running:
                                     if (event.pos[0] // 64, event.pos[1] // 64) == (b_c[0] // 64, b_c[1] // 64):
                                         if not i.wp:
                                             j.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64, True)
+                                            point = True
                                         else:
                                             j.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
+                                            point = True
+                    if not point:
+                        for i in npcs:
+                            if type(i) == UnitP:
+                                i.set_point(event.pos[0] // 64 * 64, event.pos[1] // 64 * 64)
 
     screen.fill((255, 255, 255))
     tiles_group.draw(screen)
@@ -1388,8 +1365,6 @@ while running:
     current_time = time.time()
     elapsed_time = current_time - start_time
     draw_images()
-    attack = Attack(2, 2, "p")
-    attack.update()
     build_res()
     camera.update(player)
     counters()
